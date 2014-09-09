@@ -1,0 +1,402 @@
+                    +--------------------------+
+       	             |    	CSE 451		 |
+		     | PROJECT 2: USER PROGRAMS |
+		     | 	   DESIGN DOCUMENT      	|
+		     +--------------------------+
+
+---- GROUP ----
+
+>> Fill in the names and email addresses of your group members.
+
+Akshay Sawant <asawant@zimbra.ccs.neu.edu>
+Nikkhil	 Muthye <nikkhil@zimbra.ccs.neu.edu>
+
+---- PRELIMINARIES ----
+
+>> If you have any preliminary comments on your submission, notes for the
+>> TAs, or extra credit, please give them here.
+
+>> Please cite any offline or online sources you consulted while
+>> preparing your submission, other than the Pintos documentation, course
+>> text, lecture notes, and course staff.
+  
+			   ARGUMENT PASSING
+			   ================
+
+---- DATA STRUCTURES ----
+
+>> A1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+char *argv_address[20];   // Array to hold addresses for the arguments
+
+This array is used to store the addresses of the arguments which will be pushed on to the stack. Once all the arguments are 
+pushed on to the stack and sentinel value is pushed, addresses from argv_address will be pushed on the stack in the reverse order in which they are sent.
+
+
+---- ALGORITHMS ----
+
+>> A2: Briefly describe how you implemented argument parsing.  How do
+>> you arrange for the elements of argv[] to be in the right order?
+>> How do you avoid overflowing the stack page?
+
+1. While implementing parsing arguments, we use an array to hold the address of each argument which is passed. 
+In setup_stack(), we will extract each argument from the input file name and push them onto the stack in the order 
+in which they are sent. We store the address of each argument in argv_addrss[] array.
+
+2. After pushing all the arguments on the stack, we add a sentinel 0. Then, we traverse the array argv_address[] in
+a reverse order abnd push each address from this array on top of stack. We then add the count of arguments (argc) on 
+to the stack. At the end, we again add a sentinel zero to the top of stack.
+
+3. After adding all the arguments in the reverse order, we validate the top of stack is in user space. This will avoid overflowing of the stack.
+After setting up the stack it would look as follows -
+
+Address	Name	Data	Type
+0xbffffffc	argv[3][...]	“bar\0”	char[4]
+0xbffffff8	argv[2][...]	“foo\0”	char[4]
+0xbffffff5	argv[1][...]	“-l\0”	char[3]
+0xbfffffed	argv[0][...]	“/bin/ls\0”	char[8]
+0xbfffffec	word-align	0	uint8_t
+0xbfffffe8	argv[4]	0		char *
+0xbfffffe4	argv[3]	0xbffffffc	char *
+0xbfffffe0	argv[2]	0xbffffff8	char *
+0xbfffffdc	argv[1]	0xbffffff5	char *
+0xbfffffd8	argv[0]	0xbfffffed	char *
+0xbfffffd4	argv	0xbfffffd8	char **
+0xbfffffd0	argc	4	int
+0xbfffffcc	return address	0	void (*) ()
+
+
+---- RATIONALE ----
+
+>> A3: Why does Pintos implement strtok_r() but not strtok()?
+
+strtok_r() is safer than using strtok() because it does not maintain the internal state of the parse. Also, strtok() 
+is not thread safe whereas strtok_r is.
+
+>> A4: In Pintos, the kernel separates commands into a executable name
+>> and arguments.  In Unix-like systems, the shell does this
+>> separation.  Identify at least two advantages of the Unix approach.
+
+1. In the UNIX approach, the kernel will have less load as the shell will separate the commands into an executable name. 
+Hence it reduces kernel's some work.
+2. In the UNIX approach, the shell can filter out anything erroneous beforehand so as to better protect the kernel from receiving bad arguments. 
+
+
+
+			     SYSTEM CALLS
+			     ============
+
+---- FROM USERSPACE TO THE KERNEL ----
+
+>> B0: When syscall_handler() is called, where is the system call number
+>> stored? Where are the arguments to the system call, if any, stored? 
+>> Give the backtrace of the stack during syscall_handler() (be sure
+>> to resolve addresses both in user space and in kernel space!) and
+>> give your answer in relation to this backtrace. Explain why the
+>> syscall number and arguments appear at this place in the stack. 
+
+
+Backtrace create :
+#0  create (file=0x804a8e3 "quux.dat", initial_size=0) at ../../lib/user/syscall.c:93
+#1  0x080480c3 in test_main () at ../../tests/userprog/create-normal.c:9
+#2  0x0804a8e3 in ?? ()
+#3  0x0804873f in _start (argc=1, argv=0xbfffffe6) at ../../lib/user/entry.c:9
+
+
+Backtrace  syscall_handler:
+#0  syscall_handler (f=0xc010afb0) at ../../userprog/syscall.c:34
+#1  0xc0021b28 in intr_handler (frame=0xc010afb0) at ../../threads/interrupt.c:367
+#2  0xc0021d2f in intr_entry () at ../../threads/intr-stubs.S:37
+#3  0xc010afb0 in ?? ()
+#4  0x0804a3bc in create (file=0x282 <Address 0x282 out of bounds>, initial_size=3221225328) at ../../lib/user/syscall.c:93
+#5  0x0000001b in ?? ()
+#6  0x00000282 in ?? ()
+#7  0xbfffff70 in ?? ()
+
+Backtrace Hexdump:
+bffffe90                                      09 00 00 00 |            ....|
+bffffea0  05 00 00 00 01 00 00 00-05 00 00 00 42 9d 04 08 |............B...|
+bffffeb0  01 00 00 00 e4 fe ff bf-05 00 00 00 e4 fe ff bf |................|
+bffffec0  d7 ff ff bf 04 00 00 00-e4 fe ff bf 2f 9e 04 08 |............/...|
+bffffed0  4c a1 04 08 88 ff ff bf-4a 9d 04 08 e4 fe ff bf |L.......J.......|
+bffffee0  00 00 00 00 65 63 68 6f-20 00 00 00 00 00 00 00 |....echo .......|
+bffffef0  00 00 00 00 00 00 00 00-00 00 00 00 00 00 00 00 |................|
+bfffff00  00 00 00 00 00 00 00 00-00 00 00 00 00 00 00 00 |................|
+bfffff10  00 00 00 00 00 00 00 00-00 00 00 00 00 00 00 00 |................|
+bfffff20  00 00 00 00 e9 fe ff bf-05 00 00 00 01 00 00 00 |................|
+bfffff30  00 00 00 00 00 00 00 00-00 00 00 00 7a 9e 04 08 |............z...|
+bfffff40  01 00 00 00 4c a1 04 08-84 ff ff bf 00 00 00 00 |....L...........|
+bfffff50  00 00 00 00 00 00 00 00-00 00 00 00 17 85 04 08 |................|
+bfffff60  4c a1 04 08 84 ff ff bf-00 00 00 00 00 00 00 00 |L...............|
+bfffff70  00 00 00 00 00 00 00 00-00 00 00 00 ce 80 04 08 |................|
+bfffff80  4c a1 04 08 fb ff ff bf-00 00 00 00 00 00 00 00 |L...............|
+bfffff90  00 00 00 00 00 00 00 00-00 00 00 00 00 00 00 00 |................|
+bfffffa0  00 00 00 00 00 00 00 00-00 00 00 07 81 04 08 04 |................|
+bfffffb0  00 00 00 d7 ff ff bf 00-00 00 00 00 00 00 00 00 |................|
+bfffffc0  00 00 00 00 00 00 00 00-00 00 00 00 00 00 00 04 |................|
+bfffffd0  00 00 00 d7 ff ff bf fb-ff ff bf f7 ff ff bf f3 |................|
+bfffffe0  ff ff bf ef ff ff bf 00-00 00 00 00 00 00 00 64 |...............d|
+bffffff0  65 66 00 61 62 63 00 78-79 7a 00 65 63 68 6f 00 |ef.abc.xyz.echo.|
+
+
+
+
+---- DATA STRUCTURES ----
+
+>> B1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+Changes in thread structure -
+
+struct list open_files;           /* List of files opened by current thread*/
+This list will maintain the files opened by current process.
+
+struct list child_processes; 	 /* List of all child processes of
+                                  /* current process. */
+This list maintain list of child process spawned by current thread.
+
+bool orphan; 					 /* True if process is marked as orphan.*/
+If true, current process is marked as orphan by it' parent process. This means parent process has died.
+
+struct thread *parent; 			 /* Thread pointer to parent process. */
+struct lock lock_tid; 			 /* Lock for condition variable for wait() */
+int fd_count; 				 /* Number of open file descriptors for
+                                   * current process/thread. */
+
+struct fd_name
+  {
+     int fd;                            /* File descriptor of the open file*/
+     char * file_name;                  /* File name of the open file */
+     struct file * file;                /* File pointer of the open file. */
+     struct list_elem elem;             /* Element in open_files list. */
+  };
+Each element of list open_files of a process will be of type fd_name. This structure maintains data of a file opened by process.
+
+
+struct open_file
+  {
+     char file_name[16];              /* File name of the open file */
+     int exec_cnt;                    /* Number of processes executing this
+								  * file */
+     int open_cnt;                    /* Number of times file is opened. */
+     struct lock lock;                /* Lock for write synchronization. */
+     struct list_elem elem;           /* Element in all_files list. */
+  };
+Each element of global list open_files is of type open_file. This is used for write file system call synchronization. 
+exec_cnt and open_cnt maintains the number of processes executing or opened the file.
+
+struct child_process
+  {
+     tid_t pid;                       /* pid of the child thread. */
+     enum thread_status child_status; /* Child process status. */
+     struct thread *process;          /* Child process thread. */
+     int status;                      /* Return status for parent process. */
+     struct condition child_cond;     /* Condition variable of child
+				       * process on which parent waits. */
+     struct list_elem elem;	      /* Element in child_processes list. */
+  };
+Each element of list child_processes of a process is of type child_process. This structure maintains pid, status of child, 
+pointer for child process and return status of child for wait system call.
+
+static struct list all_files;		 /* List of files currently opened or
+					  * executed by all threads. */
+
+
+>> B2: Describe how file descriptors are associated with open files.
+>> Are file descriptors unique within the entire OS or just within a
+>> single process?
+
+1. In our design, each process will maintain a list of all open files called open_files. Each element of open_files is of 
+type fd_name which maintains file descriptor of file, file name, file pointer and element of type list_elem to remain connected in open_files list.
+
+2. File descriptor values are unique within a single process. Hence even if a process opens a file multiple times, 
+different file descriptors will be assigned and maintained inside that process. Each process maintains value of file 
+descriptors for it's own open_files list. Hence file descriptors may duplicate within entire OS.
+
+---- ALGORITHMS ----
+
+>> B3: Describe your code for reading and writing user data from the
+>> kernel.
+
+1. System call methods pushes all the input parameter onto the stack. Once the control is inside syscall_handler, 
+code verifies that the addresses on the stack are valid addresses from user space.
+
+2. In case of read and write system calls, we write and read data on a buffer of certain size. Hence after writing and 
+reading buffer, we validate the end address of the buffer to be inside the user space. If the validation fails, program exits with status as -1.
+
+>> B4: Suppose a system call causes a full page (4,096 bytes) of data
+>> to be copied from user space into the kernel.  What is the least
+>> and the greatest possible number of inspections of the page table
+>> (e.g. calls to pagedir_get_page()) that might result?  What about
+>> for a system call that only copies 2 bytes of data?  Is there room
+>> for improvement in these numbers, and how much?
+
+
+1. The minimum number of calls to pagedir_get_page() to copy 4096 bytes from the user space to the kernel space would be 1 if all the data is stored on a
+single page. Then the pointer returned by pagedir_get_page will be used for memory copy.
+
+2. If the data is not present in a single page and is distributed in byte sized segments across 4096 pages, then pagedir_get_page() 
+would be called 4096 times, once for each byte and it would be provided for memory copy.
+
+For a system call that only copies 2 bytes of data, the number of calls to pagedir_get_page() would depend on the number of pages the data is spread
+on. Hence it would at require at least 1 call and most require 2 calls to pagedir_get_age function.
+
+The number of calls to pagedir_get_page would be reduced if the data is on continuous page.
+
+>> B5: Briefly describe your implementation of the "wait" system call
+>> and how it interacts with process termination.
+
+1. In case of "wait" system call wait() function pushes input pid on stack.
+2. Function syscall_handler() retrieves pid from the stack using ESP value from interrupt frame and call process_wait() function with pid.
+3. Function process_wait() gets the child process with input pid from it's child_processes list. If entry for pid doesn't exists then return -1.
+4. If the status of the child process is DYING, it means child has completed it's execution (zombie). Hence program
+ will return the status of the child process. Remove the child process element from child_processes list of current process.
+5. In case status of the child process is not DYING, then current process needs to wait on child process to complete. 
+Hence current process acquires its lock and waits on condition variable of child process by calling cond_wait().
+6. When child process completes execution, it will signal parent process of its termination by calling cond_signal() on the 
+condition variable from parent's child_processes list. Also, child process will update its return status in parent 
+processes's child_processes list.
+
+>> B6: Any access to user program memory at a user-specified address
+>> can fail due to a bad pointer value.  Such accesses must cause the
+>> process to be terminated.  System calls are fraught with such
+>> accesses, e.g. a "write" system call requires reading the system
+>> call number from the user stack, then each of the call's three
+>> arguments, then an arbitrary amount of user memory, and any of
+>> these can fail at any point.  This poses a design and
+>> error-handling problem: how do you best avoid obscuring the primary
+>> function of code in a morass of error-handling?  Furthermore, when
+>> an error is detected, how do you ensure that all temporarily
+>> allocated resources (locks, buffers, etc.) are freed?  In a few
+>> paragraphs, describe the strategy or strategies you adopted for
+>> managing these issues.  Give an example.
+
+1. In all the system calls, we check whether the last argument passed in present in the user space by calling the is_kernel_vaddr. 
+This function will return true if the given address in the kernel space. So, if it returns false, then the address is in 
+user space i.e. it is below the PHYS_BASE.
+2. We then check whether the user virtual address is mapped in the memory by calling the function lookup.
+3. We also check whether the address is not null.
+4. If any of the above three functions are true, then we will exit the process with a -1 return status.
+We have implemented this functionality in a function called validate_addr.
+
+For eg:
+
+Let's assume we get a write system call,
+
+We will first verify if the esp in the Interrupt frame is in the user space by calling is_kernel_vaddr. If this function 
+will return true, we exit the process with a return status as -1.
+If the function returns true, we then check whether the last address in the stack i.e. the (address of size variable + 4
+(size of an int variable) ) is in the user space. If this function will return true, we exit the process with a return status as -1.
+
+
+---- SYNCHRONIZATION ----
+
+>> B7: The "exec" system call returns -1 if loading the new executable
+>> fails, so it cannot return before the new executable has completed
+>> loading.  How does your code ensure this?  How is the load
+>> success/failure status passed back to the thread that calls "exec"?
+
+1. When we encounter an exec system call, we call the process_excecute() function. In this function, we first verify 
+whether the size of the command will not cause the stack to overflow. If it is not going to overflow, then we check 
+whether the given file can be loaded in the memory.
+For this, we call a function load_child_exec().
+2. We try to open the file by calling the filesys_open() function. If it returns a null pointer, it means file was not 
+found in pintos root directory and we return false. If filesys_open() returns a file pointer then program reads file's 
+ELF header and checks if the file is executable. If file is executable then program returns success otherwise false. 
+In process_execute(), if load_child_exe() returned false, then program returns -1 as exec status. Otherwise program 
+proceeds and creates child thread.
+3. Hence in case loading of child process fails, then exec would return -1. If loading is successful, then exec system 
+call would return the tid of the child process to the thread that calls exec.
+
+
+>> B8: Consider parent process P with child process C.  How do you
+>> ensure proper synchronization and avoid race conditions when P
+>> calls wait(C) before C exits?  After C exits?  How do you ensure
+>> that all resources are freed in each case?  How about when P
+>> terminates without waiting, before C exits?  After C exits?  Are
+>> there any special cases?
+
+To handle the synchronization between the parent and the child, we have implemented a new struct called child_process 
+which will contain five fields: the child thread's tid, pointer to the child thread, the current status of the 
+child thread, it's return status and a condition variable.
+
+When a wait system call occurs, we first get the child_process from the parent's child_processes list. If no such child 
+exists in the parent's list, we return -1.
+
+If we get the chid_process and it's status is THREAD_DYING then this indicates that the child process is dead (Zombie). 
+In this scenario we do not wait for child process to die and we return the return status of the child. 
+1. If the child status is not THREAD_DYING then acquire the lock of the current process and call cond_wait() on child's 
+condition variable. This blocks parent process P and waits until child process C is not complete. This ensures synchronization 
+when parent calls wait(C) before C exits. Once the child exits, we then notify the parent process (if any i.e. the current 
+process is not an orphan). We then get it's child_process struct from the parent's child_processes list and call cond_signal() on the parent process.
+2. If parent process P calls wait(C) after child process C has exited, then child process status would be updated to 
+THREAD_DYING. Before calling cond_wait on child, we check child’s status. Since it is already THREAD_DYING, parent does not wait on child and would simply return the child’s return status from child_processes list and free the child struct from the list.
+3. In process_exit(), program iterates over the list of open files and closes them, removes them from open_files list and frees its memory.
+4. When parent process enters process_exit(), we mark all child processes as orphan. Hence when child process is scheduled, in thread_schedule_tail() program checks if the current process is an orphan. If it is orphan then it would cleaned by calling thread_exit().
+5. When parent process P enters process_exit() after its child process C exits, then it C would have already updated its return status in parent P’s child_processes list. Hence we will free child process from parent P’s child_processes list.
+
+---- RATIONALE ----
+
+>> B9: Why did you choose to implement access to user memory from the
+>> kernel in the way that you did?
+
+When a user program invokes a system call, it enter kernel mode from user mode. Hence control is with kernel. Kernel needs to manage how the system call behaves and if it needs to notify any other process (eg. cond_signal to parent). In our design there are following scenario where user memory is accessed from kernel – 
+
+1. Argument passing - 
+When a user program is executed, kernel can parse input and extract the parameters to be sent to user program. Kernel pushes arguments on stack of user program.
+
+2. System calls - 
+In case of system calls kernel maintains additional data (eg. global all_files list, open_files list in each process). This helps kernel to maintain consistency through out the system. By keeping all_files kernel ensures synchronization if multiple processes try to update a single file. 
+Also kernel can manage communication between different processes by accessing their memory space. In case of exec and wait system calls, parent process may wait on child process. Hence when child process exits, it needs to wake up parent process. This can only be done if kernel has access to user memory.
+
+3. In case of read/write system calls, kernel will also check if the buffer provided by user are invalid, null, in kernel space or in other process’s user space. In such cases, kernel can throw exception or terminate the process.
+
+>> B10: What advantages or disadvantages can you see to your design
+>> for file descriptors?
+
+Advantages - 
+1. In our design each process maintains list of all open files. Hence whenever a process terminates, even if user does not explicitly close all open files, kernel will close the files.
+
+2. If any process tries to open same file multiple times and try to read or write at different positions in file then kernel can distinguish which position the process is currently referring to. For eg. process P can open “sample.txt” twice and have file descriptors as 10 and 20. For fd=10 it might read/write from offset 100 in file sample.txt whereas for fd=20, it can read/write from offset 1000 in same file.
+
+3. Kernel can block a process from updating a file, which is currently executing.
+
+4. Also, if multiple processes try to write on the same file then kernel can synchronize these updates by acquiring a lock on the file each time it tries to update. 
+
+Disadvantages – 
+1. It consumes memory on heap.
+2. Lookup time increases to O(n).
+
+>> B11: The default tid_t to pid_t mapping is the identity mapping.
+>> If you changed it, what advantages are there to your approach?
+
+In our design, we have kept default mapping from tid_t to pid_t.
+If we change the mapping, then we could have advantage of muti-threading. We could provide another system call to user such as thread_create() which would then create new thread under current process. Here pid of new thread would be same as current process (parent). But tid may be same as pid.
+
+			   SURVEY QUESTIONS
+			   ================
+
+Answering these questions is optional, but it will help us improve the
+course in future quarters.  Feel free to tell us anything you
+want--these questions are just to spur your thoughts.  You may also
+choose to respond anonymously in the course evaluations at the end of
+the quarter.
+
+>> In your opinion, was this assignment, or any one of the three problems
+>> in it, too easy or too hard?  Did it take too long or too little time?
+
+>> Did you find that working on a particular part of the assignment gave
+>> you greater insight into some aspect of OS design?
+
+>> Is there some particular fact or hint we should give students in
+>> future quarters to help them solve the problems?  Conversely, did you
+>> find any of our guidance to be misleading?
+
+>> Do you have any suggestions for the TAs to more effectively assist
+>> students, either for future quarters or the remaining projects?
+
+>> Any other comments?
+

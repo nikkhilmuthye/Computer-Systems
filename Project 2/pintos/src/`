@@ -1,0 +1,85 @@
+#include "userprog/syscall.h"
+#include <stdio.h>
+#include <syscall-nr.h>
+#include "threads/interrupt.h"
+#include "threads/thread.h"
+
+static void syscall_handler (struct intr_frame *);
+
+void
+syscall_init (void) 
+{
+  intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+}
+
+static void
+syscall_handler (struct intr_frame *f UNUSED) 
+{
+  /* Start of Project 2 */
+  int syscall_num = *(int *) f->esp;
+  int status;
+  struct thread *cur = thread_current ();
+  printf ("system call!\n");
+
+  printf ("system call number %d\n", syscall_num);
+  switch (syscall_num)
+  {
+    case SYS_HALT: shutdown_power_off ();
+    		   break;
+
+    case SYS_EXIT: status = *(int *) (f->esp+4);
+     		   printf ("%s: exit(%d)\n", cur->name, status);
+		   thread_exit ();
+    		   break;
+
+    case SYS_CREATE:
+                   char *file_name = (char *)(f->esp+4);
+    		   off_t initial_size = *(off_t *)(f->esp+8);
+                   if((file_name == null) || (initial_size <= 0))
+		   {
+		     f->eax = 0;
+		     break;
+		   }
+                   f->eax = filesys_create (file_name, initial_size);
+                   break;
+
+    case SYS_REMOVE:
+                   char *file_name = (char *)(f->esp+4);
+		   if(file_name == null)
+		   {
+		     f->eax = 0;
+		     break;
+		   }
+                   f->eax = filesys_remove (file_name);
+                   break;
+
+    case SYS_OPEN: char *file_name = (char *)(f->esp+4);
+    		   if(file_name == null) 
+		   {
+		     f->eax = -1;
+		     break;
+		   }
+		   struct file * fp = filesys_open (file_name);
+		   thread *cur = thread_current ();
+		   if (cur->fd_count < 64)
+		   {
+		     f->eax = -1;
+		     break;
+		   }
+		   int fd;
+		   int fd = lookup_fd (file_name);
+		   if (fd == -1) 
+		   {
+		     struct fd_name temp_fd;
+		     temp_fd.fd = cur->fd_count;
+		     temp_fd.file_name = file_name;
+		     cur->open_files[(cur->fd_count)++] = temp_fd;
+		     f->eax = (cur->fd_count)-1;
+		   }
+		   else
+		   {
+		     f->eax = -1;
+		   }
+		   break;
+  // thread_exit ();
+}
